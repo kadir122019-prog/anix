@@ -1,0 +1,1 @@
+This read-only initramfs is loaded by Limine and mounted at the VFS root.

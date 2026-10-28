@@ -1,0 +1,53 @@
+#ifndef ANIX_SYSCALL_ABI_H
+#define ANIX_SYSCALL_ABI_H
+
+/* Public syscall numbers and flags shared by the kernel and freestanding SDK. */
+#define ANIX_ABI_VERSION 1u
+
+enum anix_syscall_number {
+    ANIX_SYS_WRITE = 1,
+    ANIX_SYS_READLINE = 2,
+    ANIX_SYS_TICKS = 3,
+    ANIX_SYS_EXEC = 4,
+    ANIX_SYS_EXIT = 5,
+    ANIX_SYS_OPEN = 6,
+    ANIX_SYS_READ = 7,
+    ANIX_SYS_LIST = 8,
+    ANIX_SYS_CLOSE = 9,
+    ANIX_SYS_YIELD = 10,
+    ANIX_SYS_CREATE = 11,
+    ANIX_SYS_WRITE_FILE = 12,
+    ANIX_SYS_SEEK = 13,
+    ANIX_SYS_UNLINK = 14,
+    ANIX_SYS_SPAWN = 15,
+    ANIX_SYS_WAIT = 16,
+    ANIX_SYS_MKDIR = 17,
+    ANIX_SYS_CHDIR = 18,
+    ANIX_SYS_GETCWD = 19,
+    ANIX_SYS_OPEN_MODE = 20,
+    ANIX_SYS_RMDIR = 21,
+    ANIX_SYS_EXECV = 22,
+    ANIX_SYS_SPAWNV = 23,
+    ANIX_SYS_WAITPID = 24,
+    ANIX_SYS_SBRK = 25,
+    ANIX_SYS_STAT = 26,
+    ANIX_SYS_DUP = 27,
+    ANIX_SYS_GETPID = 28,
+    ANIX_SYS_GETPPID = 29,
+    ANIX_SYS_SLEEP_TICKS = 30,
+    ANIX_SYS_PIPE = 31,
+    ANIX_SYS_DUP2 = 32,
+    ANIX_SYS_GETPGID = 33,
+    ANIX_SYS_SETPGID = 34,
+    ANIX_SYS_READ_CHAR = 35,
+    ANIX_SYS_POWEROFF = 36,
+    ANIX_SYS_INPUT_EVENT = 37
+};
+
+enum anix_open_flags {
+    ANIX_OPEN_WRITE = 1u,
+    ANIX_OPEN_APPEND = 2u,
+    ANIX_OPEN_TRUNCATE = 4u
+};
+
+#endif

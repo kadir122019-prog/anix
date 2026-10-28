@@ -1,0 +1,17 @@
+format_version = 1
+
+[package]
+name = "hello"
+version = "1.0.0"
+release = 1
+arch = "x86_64"
+abi = "anix-1"
+description = "A minimal program built with the Anix SDK"
+license = "GPL-3.0-only"
+
+[[files]]
+archive_path = ""
+destination = "/usr/bin/hello"
+sha256 = ""
+mode = 493
+source = "files/usr/bin/hello"

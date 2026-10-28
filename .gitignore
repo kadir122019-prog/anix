@@ -1,0 +1,16 @@
+/build/
+/apm-root/
+/apm/target/
+/apm/examples/hello/files/usr/bin/hello
+/third_party/limine/bin/
+/vmware/anix-serial.log
+/vmware/vmware.log
+/vmware/*.log
+/vmware/nvram
+/vmware/*.vmx
+/vmware/*.vmsd
+/vmware/*.vmxf
+/vmware/*.scoreboard
+/vmware/*.lck/
+*.o
+*.d

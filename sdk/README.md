@@ -1,0 +1,45 @@
+# Anix userspace SDK
+
+This directory is a separate, freestanding x86-64 userspace development kit. It does not depend on the kernel build's private headers or modify `anixsh`. ABI v1 syscall numbers and open flags are shared in `include/anix/syscall_abi.h`; SDK wrappers are in `sdk/include/anix/syscall.h`. Calls use `int 0x80`, pass arguments in System V registers (`rdi`, `rsi`, `rdx`), and return results in `rax`. Calls return a nonnegative result on success and `-1` on failure. The kernel enables x87/SSE2 and saves/restores FXSAVE state at task switches; the example checks XMM preservation across yields. AVX state management is not implemented, so target the x86-64 baseline without AVX instructions.
+
+`anix_sbrk(increment)` grows or shrinks the calling process's private heap and returns the prior break, or `(void *)-1` if the requested change fails. Newly committed pages are writable and non-executable, released pages are reclaimed, and later growth zeroes them again. A positive increment grows the break and a negative increment shrinks it; the kernel bounds the heap below the user stack.
+
+The SDK runtime also provides `anix_malloc`, `anix_free`, `anix_calloc`, and `anix_realloc` in `anix/stdlib.h`. It returns 16-byte-aligned memory, reuses and coalesces free blocks, rejects invalid frees, checks allocation-size overflow, and returns fully free tail blocks to `sbrk`. The allocator owns the process break while in use, so applications should not mix direct `anix_sbrk` calls with allocator calls after the allocator has started.
+
+`anix/stdio.h` adds `anix_printf` and `anix_fprintf` for descriptor output, plus `anix_getline` for bounded line input on descriptor 0. The formatter supports `%s`, `%c`, `%d`/`%i`, `%u`, `%x`/`%X`, `%p`, `%%`, `l`/`ll`/`z` integer lengths, left alignment, decimal field width, and zero padding. `anix_getline` includes a newline when one fits, NUL terminates the returned bytes, and leaves any remainder for the next call; output helpers return bytes written or `-1` on error.
+
+`anix_read_char()` blocks until one keyboard or serial input character is available and returns its byte value without echoing it. The kernel’s line-based `readline` behavior remains available; character input is useful for user-space line editors such as the `anixsh` Tab completer.
+
+`anix_input_event(&event)` blocks until a normalized keyboard or pointer event is available. Keyboard events carry the PS/2 set-1 scan code, press/release state, and Shift/Caps Lock modifiers. Pointer events carry absolute framebuffer coordinates, relative motion, and button bits. This event ABI is device-neutral so future USB HID drivers can feed the same queue.
+
+The ABI provides `read`/`write`, the compatible terminal `readline` call, timer ticks, `exec`/`execv`, process `exit`, direct-child `spawn`/`spawnv`/`wait`/`waitpid`, anonymous `pipe`, descriptor `dup2`, VFS `open`/`open_mode`/`read`/`close`, directory `list`/`mkdir`/`rmdir`, per-process `chdir`/`getcwd`, cooperative `yield`, and file `create`/`seek`/`unlink`. `read(0, ...)` reads one complete terminal line at a time, includes the newline in the returned byte count, and preserves unread bytes when the caller's buffer is shorter than the line. `write(1, ...)` and `write(2, ...)` emit to serial; `write(fd, ...)` for an open writable file descriptor writes file bytes and advances its offset. The older `write_file` entry remains available for ABI compatibility. `waitpid(-1, &status)` blocks until any direct child exits and returns that child’s PID; a positive PID selects a specific child. The original path-only exec and spawn calls remain available; `execv` and `spawnv` accept bounded, NUL-terminated `argv` and `envp` vectors. Programs enter through `int anix_main(int argc, char **argv)`; the environment vector is available at `argv[argc + 1]`. Each vector is limited to 16 strings of at most 127 bytes. `rmdir` removes only empty writable directories that have no current process references. `open_mode` accepts write, append, and truncate flags while plain `open` remains read-only. Relative paths resolve from the process working directory; spawned children inherit their parent’s current directory. Spawned programs receive independent user address spaces; waits block until a child exits and return its status. The current implementation supports up to 32 process records and one CPU. File descriptors 0–2 are reserved for standard streams; current file handles start at 3. The initramfs tree is read-only except that applications may create directories and files beneath `/tmp`; those nodes live in RAM and disappear at reboot. Directories may nest, and ordinary files can be listed, opened, read, written, and unlinked through those paths. When a formatted AnixFS block volume is available, `/persist` provides bounded disk-backed files and nested directories using the compatible v1 metadata layout. Persistent files can be reopened, truncated, appended to, and rewritten. An unlinked open file remains accessible through its descriptor until it is closed. The runtime is intentionally small and does not claim POSIX or libc compatibility.
+
+Spawned processes inherit open file descriptors as references to the same open-file description. Parent and child therefore share the file offset and access mode; closing a descriptor releases only that process's reference.
+
+`anix_getpid()` and `anix_getppid()` return the current process ID and its direct parent ID. PID 1 adopts live and exited descendants when their intermediate parent exits; after PID 1 exits, remaining descendants are detached and report parent ID zero.
+
+`anix_getpgid(pid)` returns a process group ID for the current process (`pid == 0`) or one of its direct children. `anix_setpgid(pid, pgid)` changes the current process or a direct child; zero selects the current PID for `pid` or the target PID for `pgid`. A target may create its own group, keep its current group, or join a group represented by the caller or one of its children. This initial implementation has no sessions or cross-session permission model.
+
+`anix_sleep_ticks(ticks)` blocks the calling task until the APIC timer reaches its deadline, allowing other tasks and the idle task to run. Zero ticks returns immediately; intervals above `INT64_MAX` are rejected to keep wrap-safe deadline comparisons unambiguous. It returns zero after the sleep or `-1` when the interval is invalid. `anix_poweroff()` requests ACPI S5 poweroff and normally does not return; it returns `-1` when the firmware does not expose the required ACPI poweroff information.
+
+`anix_pipe(fds)` creates a 4096-byte anonymous byte stream and returns its read and write descriptors in `fds[0]` and `fds[1]`. Reads block while the pipe is empty and writers remain, then return EOF after the final writer closes. Writes block while the ring is full, may return a partial byte count, and fail if all readers close. Spawned processes inherit pipe descriptors as shared open-file descriptions.
+
+`anix_dup(fd)` allocates the lowest free file descriptor for an open descriptor. It supports the standard streams and open files; duplicated file descriptors share offsets, while duplicated standard streams refer to the same terminal endpoint. File descriptors currently range from 0 through 10, with at most eight additional descriptor slots per process.
+
+`anix_dup2(source, target)` replaces an open target descriptor with a reference to the source open-file description and returns `target`; an invalid or closed source returns `-1` without changing the target. It supports descriptors 0 through 10, including standard input/output redirection. The replacement is inherited by spawned children and survives a successful `exec`, so a program can set up a pipeline before launching another image. `source == target` succeeds only when that descriptor is open.
+
+`anix_stat(path, &status)` reports a node's type, regular-file byte size (zero for directories), and writable/persistent flags. It returns zero on success and `-1` when the path or output buffer is invalid. The stable `struct anix_stat` layout and type/flag constants are in `anix/stat.h`.
+
+Build a custom program from the repository root by passing one or more C source files and an output name:
+
+```sh
+make sdk-program ANIX_SDK_SRC="apps/hello.c apps/helpers.c" ANIX_SDK_NAME=hello
+```
+
+To package it in the initramfs and create a shell-first ISO:
+
+```sh
+make sdk-install ANIX_SDK_SRC="apps/hello.c apps/helpers.c" ANIX_SDK_NAME=hello
+```
+
+This creates `build/anix-sdk.iso`; boot it, then run `hello` from the shell. `anixsh` starts bare command names from `/bin` and accepts explicit paths too. The included test image packages `/bin/sdk-hello` and helper programs; `make sdk-demo` builds the main SDK example. You can pass extra compiler flags and local header dependencies with `SDK_EXTRA_CFLAGS` and `SDK_EXTRA_DEPS`. SDK programs provide `int anix_main(int argc, char **argv)` and are linked as static ELF64 `ET_EXEC` images at `0x600000`. They use the Anix syscall ABI and small runtime; they are not POSIX binaries and cannot be linked against the host libc.
